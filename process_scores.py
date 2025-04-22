@@ -1,9 +1,19 @@
 from collections import defaultdict
 import json
+import argparse
+
+# Arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("--path_prefix", type=str, default="/mnt/users/s8sharif/search_arena/with_response", help="Input and Output path prefix")
+args = parser.parse_args()
+
+# Unpack args
+PATH_PREFIX = args.path_prefix
 
 stats = defaultdict(int)
 data = []
-with open("./output.jsonl", 'r') as f:
+
+with open(f"{PATH_PREFIX}/results.jsonl", 'r') as f:
     for l in f:
         data.append(json.loads(l))
 
@@ -40,3 +50,6 @@ for row in data:
         stats['strict_all_inversions'] += 1
 
 print(stats)
+with open(f"{PATH_PREFIX}/aggregated_stats.json", 'w') as f:
+    json.dump(stats, f)
+    f.write('\n')

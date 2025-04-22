@@ -1,6 +1,8 @@
 import random
 import json
 import dataclasses
+import argparse
+import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from datasets import load_dataset
@@ -10,6 +12,16 @@ from nuggetizer.models.nuggetizer import Nuggetizer
 from nuggetizer.core.metrics import calculate_nugget_scores
 from tqdm import tqdm
 
+# Arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("--sampling_rate", type=float, default=0.005, help="Sampling rate for processing rows")
+parser.add_argument("--path_prefix", type=str, default="/mnt/users/s8sharif/search_arena/with_response", help="Output path prefix")
+parser.add_argument("--max_workers", type=int, default=4, help="Number of parallel workers")
+args = parser.parse_args()
+
+# Unpack args
+SAMPLING_RATE = args.sampling_rate
+PATH_PREFIX = args.path_prefix
 
 def get_prompt(row):
     message = row['messages_a'][0]
@@ -25,12 +37,14 @@ def get_completion(row, key):
     assert message['role'] == 'assistant'
     return message['content']
 
-
 def process_row(index_row_tuple):
     index, row = index_row_tuple
     if row['turn'] != 1:
         return {'skipped_reason': 'multi_turn', 'question_id': index}
-    if random.random() > 0.0005:
+    # Skip ties for now
+    if row['winner'] not in ["model_a", "model_b"]:
+        return {'skipped_reason': 'sampling', 'question_id': index}
+    if random.random() > SAMPLING_RATE:
         return {'skipped_reason': 'sampling', 'question_id': index}
 
     try:
@@ -43,9 +57,10 @@ def process_row(index_row_tuple):
             documents[0], documents[1] = documents[1], documents[0]
         request = Request(query=query, documents=documents)
 
-        nuggetizer = Nuggetizer(model="gpt-4o-mini")
+        nuggetizer = Nuggetizer(model="gpt-4.1", use_azure_openai=True)
         scored_nuggets = nuggetizer.create(request)
-        with open(f'/mnt/users/s8sharif/search_arena/with_response/nuggets/requests_with_nuggets_{index}.json', 'w') as f:
+
+        with open(f'{PATH_PREFIX}/nuggets/requests_with_nuggets_{index}.json', 'w') as f:
             json.dump({
                 "question_id": index,
                 "request": dataclasses.asdict(request),
@@ -72,7 +87,7 @@ def process_row(index_row_tuple):
             ]
             metrics[key] = calculate_nugget_scores(request.query.qid, nugget_list)
 
-        with open(f'/mnt/users/s8sharif/search_arena/with_response/assignments/assigned_nuggets_{index}.json', 'w') as f2:
+        with open(f'{PATH_PREFIX}/assignments/assigned_nuggets_{index}.json', 'w') as f2:
             result = {'question_id': index, 'winner': row['winner']}
             for key in ["a", "b"]:
                 result[f'completion_{key}'] = completions[key]
@@ -92,8 +107,9 @@ def process_row(index_row_tuple):
         print(f"[{index}] Nugget assignment failed: {e}")
         return {'skipped_reason': 'nugget_assignment', 'question_id': index}
 
-
-def create_and_assign_nuggets_parallel(max_workers=4):
+def create_and_assign_nuggets_parallel(max_workers):
+    os.makedirs(f"{PATH_PREFIX}/nuggets", exist_ok=True)
+    os.makedirs(f"{PATH_PREFIX}/assignments", exist_ok=True)
     data = load_dataset("lmarena-ai/search-arena-v1-7k", split="test")
     data_df = data.to_pandas()
 
@@ -105,10 +121,12 @@ def create_and_assign_nuggets_parallel(max_workers=4):
     }
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(process_row, (index, row)): index for index, row in tqdm(data_df.iterrows(),total=data_df.shape[0])}
+        futures = {
+            executor.submit(process_row, (index, row)): index
+            for index, row in tqdm(data_df.iterrows(), total=data_df.shape[0])
+        }
         for future in as_completed(futures):
             result = future.result()
-            print(f"processed: {result['question_id']}")
             if result.get("skipped_reason"):
                 reason = result["skipped_reason"]
                 skip_logs.setdefault(reason, []).append(result["question_id"])
@@ -116,16 +134,16 @@ def create_and_assign_nuggets_parallel(max_workers=4):
                 del result["skipped_reason"]
                 results.append(result)
 
-    print("done with all runs, saving aggeregated results.")
-    with open('/mnt/users/s8sharif/search_arena/with_response/results.jsonl', 'w') as results_file:
+    print("done with all runs, saving aggregated results.")
+    with open(f'{PATH_PREFIX}/results.jsonl', 'w') as results_file:
         for res in results:
             json.dump(res, results_file)
             results_file.write('\n')
 
-    with open('/mnt/users/s8sharif/search_arena/with_response/skips.json', 'w') as skipped_file:
+    with open(f'{PATH_PREFIX}/skips.json', 'w') as skipped_file:
         json.dump(skip_logs, skipped_file)
         skipped_file.write('\n')
 
-
 if __name__ == '__main__':
-    create_and_assign_nuggets_parallel(max_workers=2)
+    create_and_assign_nuggets_parallel(max_workers=args.max_workers)
+    
