@@ -17,11 +17,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--sampling_rate", type=float, default=0.005, help="Sampling rate for processing rows")
 parser.add_argument("--path_prefix", type=str, default="/mnt/users/s8sharif/search_arena/with_response", help="Output path prefix")
 parser.add_argument("--max_workers", type=int, default=4, help="Number of parallel workers")
+parser.add_argument("--model_name", type=str, default="gpt-4.1", help="the model name, for now from gpt family only.")
 args = parser.parse_args()
 
 # Unpack args
 SAMPLING_RATE = args.sampling_rate
 PATH_PREFIX = args.path_prefix
+MODEL_NAME= args.model_name
 
 def get_prompt(row):
     message = row['messages_a'][0]
@@ -57,15 +59,17 @@ def process_row(index_row_tuple):
             documents[0], documents[1] = documents[1], documents[0]
         request = Request(query=query, documents=documents)
 
-        nuggetizer = Nuggetizer(model="gpt-4.1", use_azure_openai=True)
+        nuggetizer = Nuggetizer(model=MODEL_NAME, use_azure_openai=True)
         scored_nuggets = nuggetizer.create(request)
 
         with open(f'{PATH_PREFIX}/nuggets/requests_with_nuggets_{index}.json', 'w') as f:
-            json.dump({
+            result_str = json.dumps({
                 "question_id": index,
                 "request": dataclasses.asdict(request),
                 "scored_nuggets": [dataclasses.asdict(sn) for sn in scored_nuggets]
-            }, f)
+            }, ensure_ascii=False)
+            f.write(result_str)
+            f.write('\n')
     except Exception as e:
         print(f"[{index}] Nugget creation failed: {e}")
         return {'skipped_reason': 'nugget_creation', 'question_id': index}
@@ -93,7 +97,9 @@ def process_row(index_row_tuple):
                 result[f'completion_{key}'] = completions[key]
                 result[f'assigned_nuggets_{key}'] = [dataclasses.asdict(an) for an in assigned_nuggets[key]]
                 result[f'metrics_{key}'] = metrics[key].__dict__
-            json.dump(result, f2)
+            result_str = json.dumps(result, ensure_ascii=False)
+            f2.write(result_str)
+            f2.write("\n")
 
         return {
             'question_id': index,
