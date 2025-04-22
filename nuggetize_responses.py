@@ -129,9 +129,9 @@ def create_and_assign_nuggets_parallel(max_workers):
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(process_row, (index, row)): index
-            for index, row in tqdm(data_df.iterrows(), total=data_df.shape[0])
+            for index, row in data_df.iterrows()
         }
-        for future in as_completed(futures):
+        for future in tqdm(as_completed(futures)):
             result = future.result()
             if result.get("skipped_reason"):
                 reason = result["skipped_reason"]
