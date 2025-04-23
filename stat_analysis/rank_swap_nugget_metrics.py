@@ -1,25 +1,21 @@
-import json
+"""Script with rank analysis test for nugget metrics."""
+
 import os
 
 import matplotlib.pyplot as plt
-import scipy.stats as stats
-import pandas as pd
 import numpy as np
+
+import nuggets_utils
 
 
 def main():
     files = [
         "/mnt/users/s8sharif/search_arena/gpt41_i_mode_5/results.jsonl",
         "/mnt/users/s8sharif/search_arena/gpt41_i_not_mode_5/results.jsonl",
-        "/mnt/users/s8sharif/search_arena/gpt41_ties/results.jsonl"
+        "/mnt/users/s8sharif/search_arena/gpt41_ties/results.jsonl",
     ]
 
-    data = []
-    for file in files:
-        with open(file, "r") as f:
-            for line in f:
-                if line.strip():
-                    data.append(json.loads(line))
+    data = nuggets_utils.load_results(files)
     metrics = ["strict_vital_score", "strict_all_score", "vital_score", "all_score"]
 
     for metric in metrics:
@@ -68,7 +64,7 @@ def main():
         plt.title(
             f"Absolute Diff for Inversions for {metric}", fontsize=28, fontweight="bold"
         )
-        
+
         results_dir = "rank_swap_hist"
         os.makedirs(results_dir, exist_ok=True)
         path = f"{results_dir}/rs_histogram_{metric}.png"
