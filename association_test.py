@@ -19,15 +19,15 @@ def main():
             winner_a.append(win)
             var_a.append(row["conv_metadata"][var])
 
-        df = pd.DataFrame({"Winner_a": winner_a, "Score_a": var_a})
+        df = pd.DataFrame({"winner_a": winner_a, "score_a": var_a})
 
         # Grouping based on winner binary
-        group0 = df[df["Winner_a"] == 0]["Score_a"]
-        group1 = df[df["Winner_a"] == 1]["Score_a"]
+        group0 = df[df["winner_a"] == 0]["score_a"]
+        group1 = df[df["winner_a"] == 1]["score_a"]
 
         with open(f"{var}_output.jsonl", "w") as f:
-            f.write(json.dumps({"Score_a_0": group0.to_list()}) + "\n")
-            f.write(json.dumps({"Score_a_1": group1.to_list()}) + "\n")
+            f.write(json.dumps({"score_a_0": group0.to_list()}) + "\n")
+            f.write(json.dumps({"score_a_1": group1.to_list()}) + "\n")
 
         alpha = 0.05
         t_stat, p_val = ttest_ind(group0, group1, equal_var=False)
@@ -36,11 +36,11 @@ def main():
 
         if p_val < alpha:
             print(
-                f"Result: Reject the null hypothesis — {var} is associated with Winner_a."
+                f"Result: Reject the null hypothesis — {var} is associated with winner_a."
             )
         else:
             print(
-                f"Result: Fail to reject the null hypothesis — no significant evidence that {var} is associated with Winner_a."
+                f"Result: Fail to reject the null hypothesis — no significant evidence that {var} is associated with winner_a."
             )
         print("-" * 79)
 

@@ -30,15 +30,15 @@ def main():
             winner_a.append(win)
             score_a.append(val["metrics_a"][metric])
 
-        df = pd.DataFrame({"Winner_a": winner_a, "Score_a": score_a})
+        df = pd.DataFrame({"winner_a": winner_a, "score_a": score_a})
 
         # Grouping based on winner binary
-        group0 = df[df["Winner_a"] == 0]["Score_a"]
-        group1 = df[df["Winner_a"] == 1]["Score_a"]
+        group0 = df[df["winner_a"] == 0]["score_a"]
+        group1 = df[df["winner_a"] == 1]["score_a"]
 
         alpha = 0.05
 
-        t_stat, p_val = ttest_ind(
+        _, p_val = ttest_ind(
             group0, group1, equal_var=False, alternative="two-sided"
         )
         test_used = "Welch's t-test"
@@ -48,11 +48,11 @@ def main():
 
         if p_val < alpha:
             print(
-                f"Result: Reject the null hypothesis — {metric}  is associated with Winner_a."
+                f"Result: Reject the null hypothesis — {metric}  is associated with winner_a."
             )
         else:
             print(
-                f"Result: Fail to reject the null hypothesis — no significant evidence that {metric} is associated with Winner_a."
+                f"Result: Fail to reject the null hypothesis — no significant evidence that {metric} is associated with winner_a."
             )
         print("-" * 79)
 

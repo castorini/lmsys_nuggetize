@@ -32,11 +32,11 @@ def main():
             )
             var_a.append(higher_var)
 
-        df = pd.DataFrame({"Winner_a": winner_a, "Score_a_bin": var_a})
+        df = pd.DataFrame({"winner_a": winner_a, "score_a_bin": var_a})
 
         # Grouping based on winner binary
-        group0 = df[df["Winner_a"] == 0]["Score_a_bin"]
-        group1 = df[df["Winner_a"] == 1]["Score_a_bin"]
+        group0 = df[df["winner_a"] == 0]["score_a_bin"]
+        group1 = df[df["winner_a"] == 1]["score_a_bin"]
 
         alpha = 0.05
         t_stat, p_val = ttest_ind(group0, group1, equal_var=False)
@@ -45,11 +45,11 @@ def main():
 
         if p_val < alpha:
             print(
-                f"Result: Reject the null hypothesis — {var[2]} is associated with Winner_a."
+                f"Result: Reject the null hypothesis — {var[2]} is associated with winner_a."
             )
         else:
             print(
-                f"Result: Fail to reject the null hypothesis — no significant evidence that {var[2]} is associated with Winner_a."
+                f"Result: Fail to reject the null hypothesis — no significant evidence that {var[2]} is associated with winner_a."
             )
 
         print("-" * 79)

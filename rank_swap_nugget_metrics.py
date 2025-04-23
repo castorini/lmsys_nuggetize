@@ -8,9 +8,6 @@ import numpy as np
 
 
 def main():
-    results_dir = "rank_swap_hist"
-    os.makedirs(results_dir, exist_ok=True)
-
     files = [
         "/mnt/users/s8sharif/search_arena/gpt41_i_mode_5/results.jsonl",
         "/mnt/users/s8sharif/search_arena/gpt41_i_not_mode_5/results.jsonl",
@@ -71,6 +68,9 @@ def main():
         plt.title(
             f"Absolute Diff for Inversions for {metric}", fontsize=28, fontweight="bold"
         )
+        
+        results_dir = "rank_swap_hist"
+        os.makedirs(results_dir, exist_ok=True)
         path = f"{results_dir}/rs_histogram_{metric}.png"
         plt.subplots_adjust(top=1.0)
         plt.savefig(path, dpi=300, bbox_inches="tight")
