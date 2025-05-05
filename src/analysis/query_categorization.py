@@ -14,26 +14,18 @@ python -m openai_categorization \
     --max_completion_tokens 512 \
     --temperature 0.7
 '''
-from openai_client import OpenAIClient
-from beir import LoggingHandler
-
+from .openai_client import OpenAIClient
 from datasets import load_dataset
 from tqdm.autonotebook import tqdm
 
 import random
 random.seed(42)
+
 import ast
 import json
 import logging
 import os
 import argparse
-
-#### Just some code to print debug information to stdout
-logging.basicConfig(format='%(asctime)s - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S',
-                    level=logging.INFO,
-                    handlers=[LoggingHandler()])
-#### /print debug information to stdout
 
 PROMPT = """
 Given the question: {question}
@@ -64,25 +56,26 @@ def main():
     hf_dataset = load_dataset(args.train_dataset, split="test")
 
     ### Load the filtered dataset query and positive passages as corpus
-    logging.info(f"Loading the test dataset ({args.train_dataset})): {len(hf_dataset)}")
+    print(f"Loading the test dataset ({args.train_dataset})): {len(hf_dataset)}")
 
     ### load the OpenAI client
     client = OpenAIClient(model_name_or_path=args.model_name_or_path)
-    logging.info(f"Using model: {args.model_name_or_path}")
+    print(f"Using model: {args.model_name_or_path}")
 
     ### Create the output directory
     os.makedirs(args.output_dir, exist_ok=True)
+    output_filepath = os.path.join(args.output_dir, f"{args.output_file}")
 
     ### check if output file path exists
     finished_queries = set()
-    if os.path.join(args.output_dir, f"{args.output_file}"):
-        logging.info(f"Output file already exists: {os.path.join(args.output_dir, f'{args.output_file}')}")
-        with open(os.path.join(args.output_dir, f"{args.output_file}"), "r", encoding="utf-8") as f:
+    if os.path.exists(output_filepath):
+        print(f"Output file already exists: {output_filepath}")
+        with open(output_filepath, "r", encoding="utf-8") as f:
             for line in f:
                 data = json.loads(line)
                 finished_queries.add(data["query"])
     
-    logging.info(f"Loaded {len(finished_queries)} queries from the existing results file....")
+    print(f"Loaded {len(finished_queries)} queries from the existing results file....")
 
     queries_to_dict = {}
     for row in tqdm(hf_dataset, total=len(hf_dataset), desc="Loading Dataset"): 
@@ -94,11 +87,11 @@ def main():
         else:
             queries_to_dict[query].append(row["question_id"])
     
-    logging.info(f"Loaded {len(queries_to_dict)} unique queries....")
+    print(f"Loaded {len(queries_to_dict)} unique queries....")
 
     ### Save the queries to a file
     
-    with open(os.path.join(args.output_dir, f"{args.output_file}"), "a", encoding="utf-8") as f:
+    with open(output_filepath, "a", encoding="utf-8") as f:
         for query, question_ids in tqdm(queries_to_dict.items(), total=len(queries_to_dict), desc="Processing Queries"):
             if query in finished_queries:
                 continue
@@ -132,8 +125,8 @@ def main():
                     f.flush()
 
             except Exception as e:
-                logging.error(f"Error processing query: {query}, output: {output_text}")
-                logging.error(f"Error: {e}")
+                print(f"Error processing query: {query}, output: {output_text}")
+                print(f"Error: {e}")
                 continue
 
 if __name__ == "__main__":

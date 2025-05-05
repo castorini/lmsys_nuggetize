@@ -1,4 +1,7 @@
 #!/bin/bash
+export AZURE_OPENAI_API_VERSION="2024-12-01-preview"
+export AZURE_OPENAI_ENDPOINT="xxxx"
+export AZURE_OPENAI_API_KEY="xxxx"
 
 PATH_PREFIX="" # ---> change it to your root path 
 CATEGORIES_PATH="" # ---> change to query categories path; a temp work around for the todo in line 23-25
@@ -20,9 +23,14 @@ python  -m src.analysis.process_results \
   --candidates_language English \
   --inversion_threshold $THRESHOLD
 
-# TODO(Nandan): add classification run python script and bash command
-# once this is added, the categories_path should be assigned here,
-# rather than hard coded at the top
+# outputs the categoryization results for each query 
+python -m src.analysis.query_categorization \
+    --model_name_or_path gpt-4.1 \
+    --train_dataset lmarena-ai/search-arena-v1-7k \
+    --output_dir $PATH_PREFIX/search-arena-v1-7k/ \
+    --output_file categories.gpt-4.1.temp.0.7.jsonl \
+    --max_completion_tokens 512 \
+    --temperature 0.7
 
 # Table 1: inversions by query category
 python -m src.analysis.inversions_by_category \
@@ -55,7 +63,11 @@ python -m src.visualization.dataset_stats \
   --top_n_languages 5
 
 # Figure 8
-# TODO(Nandan): add figure 8 python script and bash command
+python -m src.visualization.category_histogram \
+    --results_path $PATH_PREFIX/search-arena-v1-7k/categories.gpt-4.1.temp.0.7.jsonl \
+    --output_dir ./figures/query_category \
+    --hf_dataset lmarena-ai/search-arena-v1-7k \
+    --filter_single_turn
 
 # Table 3
 python -m src.analysis.sample_queries_per_category \
