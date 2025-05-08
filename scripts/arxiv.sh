@@ -3,23 +3,29 @@ export AZURE_OPENAI_API_VERSION="2024-12-01-preview"
 export AZURE_OPENAI_ENDPOINT="xxxx"
 export AZURE_OPENAI_API_KEY="xxxx"
 
-PATH_PREFIX="/mnt/users/s8sharif/search_arena/gpt41_with_urls_single_turn" # ---> change it to your root path
-VISUALIZATION_OUTPUT_DIR=./with_url_figures
+PATH_PREFIX="" # ---> change it to your root path
+VISUALIZATION_OUTPUT_DIR=./figures
 LANGUAGE=English
 METRICS=all_score
-THRESHOLD=0.05
+THRESHOLD=0.1
 CLASS_THRESHOLD=7
 
-# outputs aggregated results.jsonl and skips.json,
+# Outputs aggregated results.jsonl and skips.json,
 # in addition to dumping per query nuggets and assignments.
+# Uses the two model compeletions as documents for nugget creation.
 # python -m src.nuggetize_responses \
 #   --sampling_rate 1 \
 #   --path_prefix $PATH_PREFIX
 
+
+# Outputs aggregated results.jsonl and skips.json,
+# in addition to dumping per query nuggets and assignments.
+# Uses the summary of scraped urls as documents for nugget creation.
 # python -m src.nuggetize_with_web_search \
 #   --sampling_rate 1 \
 #   --path_prefix $PATH_PREFIX \
 #   --url_to_txt_filepath "/mnt/users/s8sharif/search_arena/urls_to_summary_files.json"
+
 
 # outputs some auxiliary analysis files including the per_language_inversion_ids.json
 python  -m src.analysis.process_results \
@@ -28,7 +34,7 @@ python  -m src.analysis.process_results \
   --candidates_language $LANGUAGE \
   --inversion_threshold $THRESHOLD
 
-# outputs the categoryization results for each query 
+# Outputs the categoryization results for each query 
 # python -m src.analysis.query_categorization \
 #     --model_name_or_path gpt-4.1 \
 #     --train_dataset lmarena-ai/search-arena-v1-7k \
@@ -38,7 +44,7 @@ python  -m src.analysis.process_results \
 #     --temperature 0.7
 
 CATEGORIES_PATH=$PATH_PREFIX/search-arena-v1-7k/categories.gpt-4.1.temp.0.7.jsonl
-# /mnt/users/n3thakur/2025/projects/nuggetization/search-arena-v1-7k/categorization/categories.gpt-4.1.prompt.researchy.questions.temp.0.7.jsonl
+
 # Table 1: inversions by query category
 python -m src.analysis.inversions_by_category \
   --path_prefix $PATH_PREFIX \
