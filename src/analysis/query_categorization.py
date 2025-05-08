@@ -1,4 +1,4 @@
-'''
+"""
 export OMP_NUM_THREADS=1
 export HF_HOME=/mnt/users/n3thakur/cache
 export DATASETS_HF_HOME=/mnt/users/n3thakur/cache
@@ -13,19 +13,22 @@ python -m openai_categorization \
     --output_file categories.gpt-4.1.prompt.researchy.questions.temp.0.7.jsonl \
     --max_completion_tokens 512 \
     --temperature 0.7
-'''
-from .openai_client import OpenAIClient
+"""
+
+import random
+
 from datasets import load_dataset
 from tqdm.autonotebook import tqdm
 
-import random
+from .openai_client import OpenAIClient
+
 random.seed(42)
 
+import argparse
 import ast
 import json
 import logging
 import os
-import argparse
 
 PROMPT = """
 Given the question: {question}
@@ -40,6 +43,7 @@ Instructions: Please output a python dictionary with fields scoring the question
 8. "harmful" : Int 0-10 to what extent the question could be interpreted as being harmful (physically or psychologically to oneself, others, or animals), offensive, overly biased, sexually explicit, or otherwise inappropriate for e.g. someone of the age of 12 to be exposed to. 
 
 Note that the above criteria are not mutually exclusive, e.g. a question can be both subjective and knowledge-intensive, for example "is capitalism better than socialism" would be both. Make sure to output only the valid python dictionary without comments or other extraneous output."""
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -74,28 +78,32 @@ def main():
             for line in f:
                 data = json.loads(line)
                 finished_queries.add(data["query"])
-    
+
     print(f"Loaded {len(finished_queries)} queries from the existing results file....")
 
     queries_to_dict = {}
-    for row in tqdm(hf_dataset, total=len(hf_dataset), desc="Loading Dataset"): 
-        query = row["messages_a"][0]['content'].strip()
-        query_b = row["messages_b"][0]['content'].strip()
+    for row in tqdm(hf_dataset, total=len(hf_dataset), desc="Loading Dataset"):
+        query = row["messages_a"][0]["content"].strip()
+        query_b = row["messages_b"][0]["content"].strip()
         assert query == query_b
         if query not in queries_to_dict:
             queries_to_dict[query] = [row["question_id"]]
         else:
             queries_to_dict[query].append(row["question_id"])
-    
+
     print(f"Loaded {len(queries_to_dict)} unique queries....")
 
     ### Save the queries to a file
-    
+
     with open(output_filepath, "a", encoding="utf-8") as f:
-        for query, question_ids in tqdm(queries_to_dict.items(), total=len(queries_to_dict), desc="Processing Queries"):
+        for query, question_ids in tqdm(
+            queries_to_dict.items(),
+            total=len(queries_to_dict),
+            desc="Processing Queries",
+        ):
             if query in finished_queries:
                 continue
-            
+
             output_text = None
 
             try:
@@ -105,12 +113,14 @@ def main():
                     temperature=args.temperature,
                     max_tokens=args.max_completion_tokens,
                     n=1,
-                    disable_logging=True
+                    disable_logging=True,
                 )
 
                 output_text = output.choices[0].message.content
                 if "python" in output_text:
-                    output_text = output_text.replace("```python", "").replace("```", "")
+                    output_text = output_text.replace("```python", "").replace(
+                        "```", ""
+                    )
 
                 output_dict = ast.literal_eval(output_text.strip())
 
@@ -119,7 +129,7 @@ def main():
                         "question_id": question_id,
                         "query": query,
                         "categories": output_dict,
-                    }        
+                    }
                     ## save the example to the output directory
                     f.write(json.dumps(example, ensure_ascii=False) + "\n")
                     f.flush()
@@ -128,6 +138,7 @@ def main():
                 print(f"Error processing query: {query}, output: {output_text}")
                 print(f"Error: {e}")
                 continue
+
 
 if __name__ == "__main__":
     main()

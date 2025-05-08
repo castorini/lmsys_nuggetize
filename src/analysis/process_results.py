@@ -112,9 +112,11 @@ def main():
         json.dump(
             {
                 "success": len(data),
-                "failed_nuggetize": len(skip_data["nugget_creation"]),
-                "failed_assignment": len(skip_data["nugget_assignment"]),
-                "multi_turn": len(skip_data["multi_turn"]),
+                "failed_nuggetize": len(skip_data.get("nugget_creation", [])),
+                "failed_assignment": len(skip_data.get("nugget_assignment", [])),
+                "multi_turn": len(skip_data.get("multi_turn", [])),
+                "sampling": len(skip_data.get("sampling", [])),
+                "zero_grounding": len(skip_data.get("zero_grounding", [])),
             },
             out_f,
         )
