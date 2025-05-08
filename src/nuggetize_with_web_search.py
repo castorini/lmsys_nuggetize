@@ -3,21 +3,30 @@ import dataclasses
 import json
 import os
 import random
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import defaultdict
-from tqdm import tqdm
-from datasets import load_dataset
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
+from datasets import load_dataset
 from nuggetizer.core.metrics import calculate_nugget_scores
 from nuggetizer.core.types import Document, Query, Request
 from nuggetizer.models.nuggetizer import Nuggetizer
+from tqdm import tqdm
 
 # Argument parsing
 parser = argparse.ArgumentParser()
-parser.add_argument("--sampling_rate", type=float, default=1, help="Sampling rate for prompt groups")
+parser.add_argument(
+    "--sampling_rate", type=float, default=1, help="Sampling rate for prompt groups"
+)
 parser.add_argument("--path_prefix", type=str, required=True, help="Output path prefix")
-parser.add_argument("--url_to_txt_filepath", type=str, required=True, help="path to the file containing a mapping from urls to the names of the files containing the url scrape")
-parser.add_argument("--max_workers", type=int, default=4, help="Number of parallel workers")
+parser.add_argument(
+    "--url_to_txt_filepath",
+    type=str,
+    required=True,
+    help="path to the file containing a mapping from urls to the names of the files containing the url scrape",
+)
+parser.add_argument(
+    "--max_workers", type=int, default=4, help="Number of parallel workers"
+)
 parser.add_argument("--model_name", type=str, default="gpt-4.1", help="The model name")
 args = parser.parse_args()
 
@@ -28,8 +37,11 @@ MODEL_NAME = args.model_name
 
 def get_completion(row, key):
     message = row[f"messages_{key}"][1]
-    assert message["role"] == "assistant", f"expected 'assistant'; got: {message['role']}"
+    assert (
+        message["role"] == "assistant"
+    ), f"expected 'assistant'; got: {message['role']}"
     return message["content"]
+
 
 def get_prompt(row):
     message = row["messages_a"][0]
@@ -39,6 +51,7 @@ def get_prompt(row):
     assert message["role"] == "user"
     assert prompt == message["content"], "both LLMs should get the same prompt"
     return prompt
+
 
 def get_urls(row):
     urls = set()
@@ -56,7 +69,7 @@ def get_urls(row):
 def process_prompt_group(args_tuple):
     prompt, qids, urls, urls_to_text_files, data_df = args_tuple
     qid_to_skipped_urls = defaultdict(list)
-    qid =  "-".join([str(qid) for qid in qids])
+    qid = "-".join([str(qid) for qid in qids])
     query = Query(qid=qid, text=prompt)
     nuggetizer = Nuggetizer(model=MODEL_NAME, window_size=20, max_nuggets=60)
     try:
@@ -81,11 +94,14 @@ def process_prompt_group(args_tuple):
 
         os.makedirs(f"{PATH_PREFIX}/nuggets", exist_ok=True)
         with open(f"{PATH_PREFIX}/nuggets/requests_with_nuggets_{qid}.json", "w") as f:
-            json.dump({
-                "prompt": prompt,
-                "request": dataclasses.asdict(request),
-                "scored_nuggets": [dataclasses.asdict(sn) for sn in scored_nuggets],
-            }, f)
+            json.dump(
+                {
+                    "prompt": prompt,
+                    "request": dataclasses.asdict(request),
+                    "scored_nuggets": [dataclasses.asdict(sn) for sn in scored_nuggets],
+                },
+                f,
+            )
             f.write("\n")
 
     except Exception as e:
@@ -96,22 +112,30 @@ def process_prompt_group(args_tuple):
     assignment_skipped_qids = []
     for qid in qids:
         try:
-            #   
-            row = data_df.iloc[qid] 
+            #
+            row = data_df.iloc[qid]
             assigned_nuggets = {}
             metrics = {}
             completions = {}
             for key in ["a", "b"]:
                 completions[key] = get_completion(row, key)
-                assigned_nuggets[key] = nuggetizer.assign(prompt, completions[key], scored_nuggets)
+                assigned_nuggets[key] = nuggetizer.assign(
+                    prompt, completions[key], scored_nuggets
+                )
                 nugget_list = [
-                    {"text": n.text, "importance": n.importance, "assignment": n.assignment}
+                    {
+                        "text": n.text,
+                        "importance": n.importance,
+                        "assignment": n.assignment,
+                    }
                     for n in assigned_nuggets[key]
                 ]
                 metrics[key] = calculate_nugget_scores(query.qid, nugget_list)
 
             os.makedirs(f"{PATH_PREFIX}/assignments", exist_ok=True)
-            with open(f"{PATH_PREFIX}/assignments/assigned_nuggets_{qid}.json", "w") as f:
+            with open(
+                f"{PATH_PREFIX}/assignments/assigned_nuggets_{qid}.json", "w"
+            ) as f:
                 result = {"question_id": qid, "winner": row["winner"]}
                 for key in ["a", "b"]:
                     result[f"completion_{key}"] = completions[key]
@@ -121,21 +145,23 @@ def process_prompt_group(args_tuple):
                     result[f"metrics_{key}"] = metrics[key].__dict__
                 json.dump(result, f)
                 f.write("\n")
-            results.append({
-                "question_id": qid,
-                "winner": row["winner"],
-                "metrics_a": metrics["a"].__dict__,
-                "metrics_b": metrics["b"].__dict__,
-            })
+            results.append(
+                {
+                    "question_id": qid,
+                    "winner": row["winner"],
+                    "metrics_a": metrics["a"].__dict__,
+                    "metrics_b": metrics["b"].__dict__,
+                }
+            )
         except Exception as e:
-            print(f"[{qid}] Assignment failed for qid {qid}: {e}",flush=True)
+            print(f"[{qid}] Assignment failed for qid {qid}: {e}", flush=True)
             assignment_skipped_qids.append(qid)
 
     output = {"skipped": {}}
     if results:
         output["results"] = results
     output["skipped"]["nugget_assignment"] = assignment_skipped_qids
-    
+
     if qid_to_skipped_urls:
         output["qid_to_skipped_urls"] = qid_to_skipped_urls
     return output
@@ -163,12 +189,20 @@ def create_and_assign_nuggets_parallel():
 
     args_list = []
     for prompt in prompt_to_qids:
-        args_list.append((prompt, prompt_to_qids[prompt],list(prompt_to_urls[prompt]), urls_to_text_files, data_df))
+        args_list.append(
+            (
+                prompt,
+                prompt_to_qids[prompt],
+                list(prompt_to_urls[prompt]),
+                urls_to_text_files,
+                data_df,
+            )
+        )
 
     all_results = []
 
     with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
-        futures = [executor.submit(process_prompt_group, args) for args in args_list[:100]]
+        futures = [executor.submit(process_prompt_group, args) for args in args_list]
         for future in tqdm(as_completed(futures), total=len(futures)):
             result = future.result()
             if not result:
@@ -178,7 +212,9 @@ def create_and_assign_nuggets_parallel():
             if "results" in result:
                 all_results.extend(result["results"])
             if "qid_to_skipped_urls" in result:
-                skip_log["qid_to_skipped_urls"].extend([(k,v) for k,v in result["qid_to_skipped_urls"].items()])
+                skip_log["qid_to_skipped_urls"].extend(
+                    [(k, v) for k, v in result["qid_to_skipped_urls"].items()]
+                )
 
     with open(f"{PATH_PREFIX}/results.jsonl", "w") as f:
         for r in all_results:

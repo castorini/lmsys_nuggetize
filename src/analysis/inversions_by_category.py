@@ -24,6 +24,7 @@ def load_skips(path_prefix):
         + data.get("nugget_assignment", [])
         + data.get("sampling", [])
         + data.get("multi_turn", [])
+        + data.get("zero_grounding", [])
     )
 
 

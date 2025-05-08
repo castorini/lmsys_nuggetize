@@ -8,7 +8,6 @@ import requests
 from datasets import load_dataset
 from tqdm import tqdm
 
-
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0"
@@ -114,7 +113,9 @@ def main(path_prefix):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path_prefix", type=str, required=True, help="Path prefix for saving outputs")
+    parser.add_argument(
+        "--path_prefix", type=str, required=True, help="Path prefix for saving outputs"
+    )
     args = parser.parse_args()
 
     main(args.path_prefix)

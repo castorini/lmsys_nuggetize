@@ -39,17 +39,19 @@ def process_url(i_url, path_prefix: str):
         client = OpenAI(api_key=get_openai_api_key())
         completion = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{
-                "role": "user",
-                "content": f"""
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"""
 Summarize the contents of following Webpage Scrape in its original language.
 Be sure to keep all the important details.
 DON'T include JavaScript code in your summary.
 
 # Webpage Scrape:
 {text_scrape[:40000]}
-                """
-            }]
+                """,
+                }
+            ],
         )
         summary_text = completion.choices[0].message.content
         if summary_text.startswith("I'm sorry,"):
@@ -80,6 +82,7 @@ def main():
     path_prefix = args.path_prefix
 
     from multiprocessing import set_start_method
+
     try:
         set_start_method("fork")
     except RuntimeError:

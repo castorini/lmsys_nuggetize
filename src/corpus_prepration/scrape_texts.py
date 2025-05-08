@@ -63,6 +63,7 @@ def main(path_prefix):
 
     try:
         from multiprocessing import set_start_method
+
         set_start_method("fork")
     except RuntimeError:
         pass
@@ -91,7 +92,10 @@ def main(path_prefix):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--path_prefix", type=str, required=True, help="Path prefix for input and output files"
+        "--path_prefix",
+        type=str,
+        required=True,
+        help="Path prefix for input and output files",
     )
     args = parser.parse_args()
     main(args.path_prefix)
