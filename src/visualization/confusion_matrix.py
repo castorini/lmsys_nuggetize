@@ -9,7 +9,7 @@ import pandas as pd
 import seaborn as sns
 from datasets import load_dataset
 
-from src.metrics_enum import Metric
+from src.utils import Metric
 
 
 def draw_non_sq_confusion_matrix(gts, preds, name):
@@ -99,7 +99,7 @@ def conf_matrices_for_query_categories(
             path = os.path.join(
                 output_dir,
                 "per_query_category_conf_matrix",
-                f"{diff_thresh}_conf_mat_{cat}_{metric}.png",
+                f"{diff_thresh}_conf_mat_{cat}_{metric}.pdf",
             )
             draw_non_sq_confusion_matrix(*labels, path)
 
@@ -114,7 +114,7 @@ def conf_matrices_for_languages(diff_thresh, data_df, metrics, output_dir):
             path = os.path.join(
                 output_dir,
                 "per_lang_conf_matrix",
-                f"{diff_thresh}_conf_mat_{language}_{metric}.png",
+                f"{diff_thresh}_conf_mat_{language}_{metric}.pdf",
             )
             draw_non_sq_confusion_matrix(*labels, path)
 
@@ -123,7 +123,7 @@ def overall_conf_matrix(diff_thresh, data_df, metrics, output_dir):
     for metric in metrics:
         labels = prepare_labels(data_df, diff_thresh, metric)
         path = os.path.join(
-            output_dir, "overall_conf_matrix", f"{diff_thresh}_conf_mat_{metric}.png"
+            output_dir, "overall_conf_matrix", f"{diff_thresh}_conf_mat_{metric}.pdf"
         )
         draw_non_sq_confusion_matrix(*labels, path)
 

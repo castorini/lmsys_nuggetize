@@ -3,6 +3,7 @@ import dataclasses
 import json
 import os
 import random
+from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from datasets import load_dataset
@@ -10,6 +11,8 @@ from nuggetizer.core.metrics import calculate_nugget_scores
 from nuggetizer.core.types import Document, Query, Request
 from nuggetizer.models.nuggetizer import Nuggetizer
 from tqdm import tqdm
+
+from src.utils import get_prompt
 
 # Arguments
 parser = argparse.ArgumentParser()
@@ -34,22 +37,36 @@ parser.add_argument(
     default="gpt-4.1",
     help="the model name, for now from gpt family only.",
 )
+parser.add_argument(
+    "--retrieved_runfile",
+    type=str,
+    required=False,
+    default="",
+    help="the filepath to retrieved results in trec eval format.",
+)
+parser.add_argument(
+    "--chunks_file",
+    type=str,
+    required=False,
+    default="",
+    help="the path to the jsonl file containing chunked scraped urls.",
+)
+parser.add_argument(
+    "--max_chunks",
+    type=int,
+    required=False,
+    default=50,
+    help="the maximum number or retrieved chunks used for nugget creation",
+)
 args = parser.parse_args()
 
 # Unpack args
 SAMPLING_RATE = args.sampling_rate
 PATH_PREFIX = args.path_prefix
 MODEL_NAME = args.model_name
-
-
-def get_prompt(row):
-    message = row["messages_a"][0]
-    assert message["role"] == "user"
-    prompt = message["content"]
-    message = row["messages_b"][0]
-    assert message["role"] == "user"
-    assert prompt == message["content"], "both LLMs should get the same prompt"
-    return prompt
+RETRIEVED_RUNFILE = args.retrieved_runfile
+CHUNKS_FILE = args.chunks_file
+MAX_CHUNKS = args.max_chunks
 
 
 def get_completion(row, key):
@@ -58,8 +75,29 @@ def get_completion(row, key):
     return message["content"]
 
 
+def parse_rank_file(retrieved_runfile):
+    qid_to_doc_ids = defaultdict(list)
+    with open(retrieved_runfile, "r") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) < 6:
+                continue
+            qid, _, doc_id, _, _, _ = parts
+            qid_to_doc_ids[qid].append(doc_id)
+    return qid_to_doc_ids
+
+
+def load_retrieved_chunks(chunks_file):
+    doc_id_to_chunk = {}
+    with open(chunks_file, "r") as f:
+        for line in f:
+            data = json.loads(line.strip())
+            doc_id_to_chunk[data["_id"]] = data["text"]
+    return doc_id_to_chunk
+
+
 def process_row(index_row_tuple):
-    index, row = index_row_tuple
+    index, row, retrieved_chunks = index_row_tuple
     if row["turn"] != 1:
         return {"skipped_reason": "multi_turn", "question_id": index}
     if random.random() > SAMPLING_RATE:
@@ -73,6 +111,8 @@ def process_row(index_row_tuple):
         ]
         if random.random() > 0.5:
             documents[0], documents[1] = documents[1], documents[0]
+        for chunk_id, chunk in retrieved_chunks:
+            documents.append(Document(docid=chunk_id, segment=chunk))
         request = Request(query=query, documents=documents)
 
         nuggetizer = Nuggetizer(model=MODEL_NAME, use_azure_openai=True)
@@ -152,10 +192,18 @@ def create_and_assign_nuggets_parallel(max_workers):
         "nugget_assignment": [],
         "multi_turn": [],
     }
-
+    qids_to_docids = parse_rank_file(RETRIEVED_RUNFILE) if RETRIEVED_RUNFILE else {}
+    docid_to_chunk = load_retrieved_chunks(CHUNKS_FILE) if CHUNKS_FILE else {}
+    qid_to_chunks = defaultdict(list)
+    for qid, doc_ids in qids_to_docids.items():
+        qid_to_chunks[int(qid)] = [
+            (doc_id, docid_to_chunk[doc_id]) for doc_id in doc_ids[:MAX_CHUNKS]
+        ]
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(process_row, (index, row)): index
+            executor.submit(
+                process_row, (index, row, qid_to_chunks[row["question_id"]])
+            ): index
             for index, row in data_df.iterrows()
         }
         for future in tqdm(as_completed(futures), total=data_df.shape[0]):

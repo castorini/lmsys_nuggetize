@@ -5,10 +5,14 @@ import os
 
 def main(input_paths, output_path):
     results = []
+    successful_qids = set()
     for input_path in input_paths:
         with open(os.path.join(input_path, "results.jsonl"), "r") as f:
             for l in f:
-                results.append(json.loads(l))
+                result = json.loads(l)
+                if result["question_id"] not in successful_qids:
+                    results.append(result)
+                    successful_qids.add(result["question_id"])
 
     os.makedirs(output_path, exist_ok=True)
     with open(os.path.join(output_path, "results.jsonl"), "w") as f:
@@ -16,14 +20,19 @@ def main(input_paths, output_path):
             json.dump(result, f)
             f.write("\n")
 
-    skips = {"nugget_creation": [], "nugget_assignment": [], "multi_turn": []}
+    skips = {
+        "nugget_creation": [],
+        "nugget_assignment": [],
+        "multi_turn": [],
+        "sampling": [],
+    }
     for input_path in input_paths:
         with open(f"{input_path}/skips.json", "r") as f:
             data = json.load(f)
             for key in skips:
                 skips[key].extend(data[key])
         for key in skips:
-            skips[key] = list(set(skips[key]))
+            skips[key] = list(set(skips[key]) - successful_qids)
 
     with open(os.path.join(output_path, "skips.json"), "w") as f:
         json.dump(skips, f)

@@ -5,17 +5,7 @@ from collections import defaultdict
 
 from datasets import load_dataset
 
-from src.metrics_enum import Metric
-
-
-def get_prompt(row):
-    message = row["messages_a"][0]
-    assert message["role"] == "user"
-    prompt = message["content"]
-    message = row["messages_b"][0]
-    assert message["role"] == "user"
-    assert prompt == message["content"], "both LLMs should get the same prompt"
-    return prompt
+from src.utils import Metric, get_prompt
 
 
 def main():
@@ -116,7 +106,6 @@ def main():
                 "failed_assignment": len(skip_data.get("nugget_assignment", [])),
                 "multi_turn": len(skip_data.get("multi_turn", [])),
                 "sampling": len(skip_data.get("sampling", [])),
-                "zero_grounding": len(skip_data.get("zero_grounding", [])),
             },
             out_f,
         )
