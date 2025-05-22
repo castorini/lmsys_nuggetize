@@ -84,7 +84,7 @@ def main():
 
         # Save individual pdf (you can change the filename pattern as you like)
         os.makedirs(args.output_dir, exist_ok=True)
-        fig.savefig(f"{args.output_dir}/query_category_{col}.png", bbox_inches="tight")
+        fig.savefig(f"{args.output_dir}/query_category_{col}.pdf", bbox_inches="tight")
 
 
 if __name__ == "__main__":

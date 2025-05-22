@@ -1,22 +1,11 @@
 import argparse
 import json
 import os
-from collections import defaultdict
 
 import pandas as pd
 from datasets import load_dataset
 
-
-def load_inversion_ids(path_prefix):
-    inversion_ids = defaultdict(set)
-    with open(os.path.join(path_prefix, "per_language_inversion_ids.json"), "r") as f:
-        input_dict = json.load(f)
-        data, metadata = input_dict["data"], input_dict["metadata"]
-        for lang, lang_dict in data.items():
-            for direction_list in lang_dict.values():
-                for qid, _ in direction_list:
-                    inversion_ids[lang].add(qid)
-    return inversion_ids, metadata
+from src.utils import load_inversion_ids
 
 
 def compute_language_percentages(inversion_by_lang, dataset_df, jsonl_df):

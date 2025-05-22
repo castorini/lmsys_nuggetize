@@ -5,27 +5,7 @@ from collections import defaultdict
 
 from datasets import load_dataset
 
-
-def get_prompt(row):
-    message = row["messages_a"][0]
-    assert message["role"] == "user"
-    prompt = message["content"]
-    message = row["messages_b"][0]
-    assert message["role"] == "user"
-    assert prompt == message["content"], "Both LLMs should get the same prompt"
-    return prompt
-
-
-def load_skips(path_prefix):
-    with open(os.path.join(path_prefix, "skips.json"), "r") as f:
-        data = json.load(f)
-    return set(
-        data.get("nugget_creation", [])
-        + data.get("nugget_assignment", [])
-        + data.get("sampling", [])
-        + data.get("multi_turn", [])
-        + data.get("zero_grounding", [])
-    )
+from src.utils import get_prompt, load_skips
 
 
 def main():

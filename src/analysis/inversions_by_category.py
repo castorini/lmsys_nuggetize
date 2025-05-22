@@ -3,29 +3,7 @@ import json
 import os
 from collections import defaultdict
 
-
-def load_inversion_ids(path_prefix):
-    inversion_ids = set()
-    with open(os.path.join(path_prefix, "per_language_inversion_ids.json"), "r") as f:
-        input_dict = json.load(f)
-        data, metadata = input_dict["data"], input_dict["metadata"]
-        for lang_dict in data.values():
-            for direction_list in lang_dict.values():
-                for qid, _ in direction_list:
-                    inversion_ids.add(qid)
-    return inversion_ids, metadata
-
-
-def load_skips(path_prefix):
-    with open(os.path.join(path_prefix, "skips.json"), "r") as f:
-        data = json.load(f)
-    return set(
-        data.get("nugget_creation", [])
-        + data.get("nugget_assignment", [])
-        + data.get("sampling", [])
-        + data.get("multi_turn", [])
-        + data.get("zero_grounding", [])
-    )
+from src.utils import load_inversion_ids, load_skips
 
 
 def compute_category_percentages(categories_path, skips, inversion_ids, threshold):
@@ -79,7 +57,10 @@ def main():
     args = parser.parse_args()
 
     skips = load_skips(args.path_prefix)
-    inversion_ids, metadata = load_inversion_ids(args.path_prefix)
+    inversion_ids_by_lang, metadata = load_inversion_ids(args.path_prefix)
+    inversion_ids = set()
+    for v in inversion_ids_by_lang.values():
+        inversion_ids = inversion_ids | v
     percentage = compute_category_percentages(
         args.categories_path, skips, inversion_ids, args.class_threshold
     )

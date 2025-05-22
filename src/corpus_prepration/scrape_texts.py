@@ -1,101 +1,123 @@
 import argparse
 import json
-import os
-import warnings
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import Pool
+from pathlib import Path
 
-import html2text
+import fitz  # PyMuPDF
 from bs4 import BeautifulSoup
-from bs4.builder import XMLParsedAsHTMLWarning
-from tqdm import tqdm
-
-warnings.filterwarnings("error", category=XMLParsedAsHTMLWarning)
+from readability import Document
 
 
-def process_url(i_url, html_dir, text_dir):
-    i, url = i_url
-    url = url.strip()
-    json_file = os.path.join(html_dir, f"file_{i}.json")
-    if not os.path.isfile(json_file):
-        return None
-    text_file = os.path.join(text_dir, f"file_{i}.txt")
-    if os.path.isfile(text_file):
-        return (url, text_file)
-
+def extract_text_from_pdf(file_path):
     try:
-        with open(json_file, "r") as f:
-            data = json.load(f)
-        assert data["url"] == url, f"{data['url']} vs. {url}"
-        html_content = data["content"]
-        soup = BeautifulSoup(html_content, "lxml")
-        for s in soup.select("script"):
-            s.extract()
-        body = soup.find("body")
-        text_maker = html2text.HTML2Text()
-        text_maker.ignore_links = True
-        text_maker.ignore_mailto_links = True
-        text_maker.ignore_images = True
-        scraped_text = text_maker.handle(body.prettify() if body else soup.prettify())
-    except Warning:
-        soup = BeautifulSoup(html_content, "xml")
-        scraped_text = soup.get_text("\n", strip=True)
+        with fitz.open(file_path) as doc:
+            return "\n".join(page.get_text() for page in doc)
     except Exception as e:
-        print(f"[Url {url}] Failed to process due to: {e}")
-        scraped_text = ""
-
-    if scraped_text:
-        try:
-            os.makedirs(text_dir, exist_ok=True)
-            with open(text_file, "w") as f:
-                f.write(scraped_text)
-                f.write("\n")
-            return (url, text_file)
-        except Exception as e:
-            print(f"[Url {url}] Failed to write file: {e}")
-    return None
+        raise RuntimeError(f"PyMuPDF error: {e}")
 
 
-def main(path_prefix):
-    html_dir = os.path.join(path_prefix, "htmls")
-    text_dir = os.path.join(path_prefix, "scraped_texts")
-    urls_file = os.path.join(path_prefix, "urls.txt")
-    output_mapping_file = os.path.join(path_prefix, "urls_to_text_files.json")
+def extract_text_from_file(file_path):
+    ext = Path(file_path).suffix.lower()
+
+    if ext == ".pdf":
+        return extract_text_from_pdf(file_path)
+
+    elif ext in [".html", ".xml"]:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            html = f.read()
+
+        doc = Document(html)
+        summary = doc.summary()
+        soup = BeautifulSoup(summary, "lxml")
+
+        for tag in soup(["script", "style", "img", "nav", "footer", "header", "aside"]):
+            tag.decompose()
+
+        return soup.get_text(separator="\n", strip=True)
+
+    else:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+
+
+def _extract_and_write(args):
+    i, url, filename, input_dir, output_dir = args
+    file_path = input_dir / filename
+    out_path = output_dir / f"filename_{i}.txt"
+
+    if not file_path.exists():
+        print(f"[Skipped] Missing file: {file_path}")
+        return (url, None)
+
+    if out_path.exists():
+        return (url, f"filename_{i}.txt")
 
     try:
-        from multiprocessing import set_start_method
+        text = extract_text_from_file(file_path)
+    except Exception as e:
+        print(f"[Error] Failed to extract {file_path.name}: {e}")
+        return (url, None)
 
-        set_start_method("fork")
-    except RuntimeError:
-        pass
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(text)
 
-    with open(urls_file, "r") as f:
-        urls = [line.strip() for line in f if line.strip()]
+    print(f"[Extracted] {file_path.name} -> filename_{i}.txt")
+    return (url, f"filename_{i}.txt")
+
+
+def extract_all_texts(path_prefix, workers=8):
+    urls_path = Path(path_prefix) / "urls.txt"
+    mapping_path = Path(path_prefix) / "urls_to_downloaded_filesnames.json"
+    input_dir = Path(path_prefix) / "downloaded_files"
+    output_dir = Path(path_prefix) / "scraped_texts"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not urls_path.exists() or not mapping_path.exists():
+        raise FileNotFoundError(
+            "Missing urls.txt or urls_to_downloaded_filesnames.json"
+        )
+
+    with open(urls_path, "r") as f:
+        urls = sorted([line.strip() for line in f if line.strip()])
     urls = sorted(urls)
 
-    urls_to_text_files = {}
-    with ProcessPoolExecutor(max_workers=8) as executor:
-        futures = [
-            executor.submit(process_url, (i, url), html_dir, text_dir)
-            for i, url in enumerate(urls)
-        ]
-        for future in tqdm(as_completed(futures), total=len(futures)):
-            result = future.result()
-            if result:
-                url, text_file = result
-                urls_to_text_files[url] = text_file
+    with open(mapping_path, "r") as f:
+        url_to_filename = json.load(f)
 
-    with open(output_mapping_file, "w") as f:
-        json.dump(urls_to_text_files, f)
-        f.write("\n")
+    args_list = []
+    for i, url in enumerate(urls):
+        filename = url_to_filename.get(url)
+        if filename:
+            args_list.append((i, url, filename, input_dir, output_dir))
+        else:
+            print(f"[Skipped] No downloaded file for URL: {url}")
+
+    with Pool(processes=workers) as pool:
+        results = pool.map(_extract_and_write, args_list)
+
+    # Save new mapping
+    text_mapping = {url: txt_file for url, txt_file in results if txt_file}
+    mapping_output_path = Path(path_prefix) / "urls_to_text_files.json"
+    with open(mapping_output_path, "w", encoding="utf-8") as f:
+        json.dump(text_mapping, f, indent=2)
+
+    print(f"\n✅ Saved mapping: {mapping_output_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Extract text from all downloaded files."
+    )
+    parser.add_argument(
+        "--path_prefix", required=True, help="Directory containing downloaded_files"
+    )
+    parser.add_argument(
+        "--workers", type=int, default=8, help="Number of worker processes"
+    )
+    args = parser.parse_args()
+
+    extract_all_texts(args.path_prefix, workers=args.workers)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--path_prefix",
-        type=str,
-        required=True,
-        help="Path prefix for input and output files",
-    )
-    args = parser.parse_args()
-    main(args.path_prefix)
+    main()

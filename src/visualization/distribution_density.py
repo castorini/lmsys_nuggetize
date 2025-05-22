@@ -8,7 +8,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.stats import ks_2samp
 
-from src.metrics_enum import Metric
+from src.utils import Metric
 
 
 def get_data_df(results_path, metric):
@@ -82,7 +82,7 @@ def probability_distribution(df, metric, output_dir):
 
     # Final layout
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, f"{str(metric)}_density.png"), dpi=300)
+    plt.savefig(os.path.join(output_dir, f"{str(metric)}_density.pdf"), dpi=300)
     plt.close()
 
 
@@ -163,7 +163,7 @@ def ks_test(df, metric, output_dir):
     # Global settings
     plt.tight_layout()
     plt.savefig(
-        os.path.join(output_dir, f"{str(metric)}_ks_test_comparisons.png"),
+        os.path.join(output_dir, f"{str(metric)}_ks_test_comparisons.pdf"),
         dpi=300,
         bbox_inches="tight",
     )

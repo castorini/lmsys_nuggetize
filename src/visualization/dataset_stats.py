@@ -40,7 +40,7 @@ def win_pie_chart(dataset_df, output_dir):
     }
     pie_colors = [colors[cat] for cat in categories]
 
-    plt.rcParams.update({"font.size": 16})
+    plt.rcParams.update({"font.size": 13})
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.pie(
         win_counts,
@@ -50,9 +50,9 @@ def win_pie_chart(dataset_df, output_dir):
         colors=pie_colors,
         wedgeprops={"edgecolor": "white"},
     )
-    ax.set_title("Win Category Distribution (Single Turn Only)")
+    plt.suptitle("Win Category Distribution (Single Turn Only)")
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "win_category_pie_chart.png"), dpi=300)
+    plt.savefig(os.path.join(output_dir, "win_category_pie_chart.pdf"), dpi=300)
     plt.close()
 
 
@@ -63,7 +63,7 @@ def lang_pie_chart(top_n, dataset_df, output_dir):
     if other_count > 0:
         top_langs["others"] = other_count
 
-    plt.rcParams.update({"font.size": 14})
+    plt.rcParams.update({"font.size": 13})
     plt.figure(figsize=(6, 6))
     top_langs.plot(
         kind="pie",
@@ -72,10 +72,10 @@ def lang_pie_chart(top_n, dataset_df, output_dir):
         colors=plt.cm.Set3.colors,
         textprops={"fontsize": 12},
     )
-    plt.title("Language Distribution (Single Turn Only)")
+    plt.suptitle("Language Distribution (Single Turn Only)")
     plt.ylabel("")
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "language_pie_chart.png"), dpi=300)
+    plt.savefig(os.path.join(output_dir, "language_pie_chart.pdf"), dpi=300)
     plt.close()
 
 
