@@ -3,12 +3,16 @@
 PATH_PREFIX="" # ---> change it to your root path
 
 # download urls
-urls_count=$(wc -l < $PATH_PREFIX/urls.txt)
-echo $urls_count
+if [ ! -d "$PATH_PREFIX/downloaded_files" ]; then
+    echo "Creating directory: $PATH_PREFIX/downloaded_files"
+    mkdir -p "$PATH_PREFIX/downloaded_files"
+fi
+
 download_count=$(ls $PATH_PREFIX/downloaded_files | wc -l)
 echo $download_count
 prev_count=$download_count
-while [ $download_count -lt $urls_count ];
+# Retries previously failed downloads, stops when no new url is successfully downloaded in an iteration.
+while true;
 do
     python -m src.corpus_prepration.download_urls \
         --path_prefix $PATH_PREFIX
@@ -28,6 +32,7 @@ scrape_count=$(ls $PATH_PREFIX/scraped_texts | wc -l)
 echo $scrape_count
 
 # Chunk extracted texts
+python -m spacy download xx_sent_ud_sm
 python -m src.corpus_prepration.chunk_texts \
     --path_prefix $PATH_PREFIX
 
