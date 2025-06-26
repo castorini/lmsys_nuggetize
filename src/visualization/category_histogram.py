@@ -8,14 +8,14 @@ import seaborn as sns
 from datasets import Dataset, load_dataset
 
 
-def load_query_ids(hf_dataset: Dataset, filter_single_turn: bool = True):
+def load_query_ids(dataset: Dataset, skip_multi_turn: bool, skip_no_vote: bool):
     query_ids = set()
-    for row in hf_dataset:
-        if filter_single_turn:
-            if len(row["messages_a"]) == 2:
-                query_ids.add(row["question_id"])
-        else:
-            query_ids.add(row["question_id"])
+    for idx, row in dataset.iterrows():
+        if skip_multi_turn and row["turn"] != 1:
+            continue
+        if skip_no_vote and not row["winner"]:
+            continue
+        query_ids.add(idx)
     return query_ids
 
 
@@ -25,20 +25,23 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--results_path", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--dataset", type=str, required=True, help="dataset name")
     parser.add_argument(
-        "--hf_dataset", type=str, default="lmarena-ai/search-arena-v1-7k"
+        "--skip_multi_turn", action="store_true", help="skips multi-turn queries"
     )
     parser.add_argument(
-        "--filter_single_turn", action="store_true", help="Filter single-turn queries"
+        "--skip_no_vote", action="store_true", help="skips queries with no human vote"
     )
     args = parser.parse_args()
 
     # Load the dataset
-    hf_dataset = load_dataset(args.hf_dataset, split="test")
+    dataset = load_dataset(args.dataset, split="test").to_pandas()
+    if "question_id" not in dataset.columns:  # 24k has removed 'question_id'
+        dataset["question_id"] = dataset.index
     print(
-        f"Loading the test dataset ({args.hf_dataset})) with filter single-turn queries: {args.filter_single_turn}"
+        f"Loading the test dataset ({args.dataset})) with skip multi-turn queries: {args.skip_multi_turn}"
     )
-    query_ids = load_query_ids(hf_dataset, args.filter_single_turn)
+    query_ids = load_query_ids(dataset, args.skip_multi_turn, args.skip_no_vote)
     print(f"Total number of queries: {len(query_ids)}")
 
     # load the data as a DataFrame

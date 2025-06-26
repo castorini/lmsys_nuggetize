@@ -31,10 +31,17 @@ def main():
         default="English",
         help="Target language to filter (default: English)",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        required=True,
+        help="The search arena dataset",
+    )
     args = parser.parse_args()
 
-    input_df = load_dataset("lmarena-ai/search-arena-v1-7k", split="test").to_pandas()
-    input_df = input_df.set_index("question_id")
+    input_df = load_dataset(args.dataset, split="test").to_pandas()
+    if "question_id" not in input_df.columns:
+        input_df["question_id"] = input_df.index
 
     skips = load_skips(args.path_prefix)
     categories = defaultdict(list)
@@ -47,7 +54,11 @@ def main():
                 continue
 
             row = input_df.loc[qid]
-            lang = row["language"]
+            lang = row["language"] if "language" in row else row["languages"]
+            if not isinstance(lang, str):
+                lang = (
+                    "" if len(lang) != 1 else lang[0]
+                )  # skips multilingual rows and those without any assigned languages.
             if lang != args.language:
                 continue
 

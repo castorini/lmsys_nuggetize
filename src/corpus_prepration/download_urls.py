@@ -1,10 +1,13 @@
 import argparse
 import json
 import multiprocessing
+import numpy as np
 import os
 from ftplib import FTP
 from pathlib import Path
 from urllib.parse import urlparse
+from firecrawl import FirecrawlApp
+from dotenv import load_dotenv
 
 import requests
 import urllib3
@@ -14,47 +17,68 @@ from tqdm import tqdm
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from playwright.sync_api import sync_playwright
 
+load_dotenv()
+FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY")
 
-def aggregate_urls(output_path):
+
+def aggregate_urls(dataset, skip_multi_turn, skip_no_vote, output_path):
     urls = set()
-    data = load_dataset("lmarena-ai/search-arena-v1-7k", split="test")
+    data = load_dataset(dataset, split="test")
     data_df = data.to_pandas()
     qids_with_urls = set()
     for index, row in tqdm(data_df.iterrows(), total=data_df.shape[0]):
-        assert index == row["question_id"]
-        if row["turn"] != 1:
+        if skip_multi_turn and row["turn"] != 1:
+            continue
+        if skip_no_vote and not row["winner"]:
             continue
         for key in ["a", "b"]:
             web_search_traces = row[f"system_{key}_metadata"]["web_search_trace"]
             for web_search_trace in web_search_traces:
-                search_results = web_search_trace["search_results"]
-                if search_results is None:
-                    continue
-                for result in search_results:
-                    urls.add(result["url"])
-                    qids_with_urls.add(row["question_id"])
+                if isinstance(web_search_trace, np.ndarray):  # 24k
+                    for result in web_search_trace:
+                        urls.add(result[1])
+                        qids_with_urls.add(index)
+                else:  # v1-7k
+                    search_results = web_search_trace["search_results"]
+                    if search_results is None:
+                        continue
+                    for result in search_results:
+                        urls.add(result["url"])
+                        qids_with_urls.add(index)
     print(len(qids_with_urls))
     print(len(urls))
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         for url in sorted(urls):
             f.write(f"{url}\n")
 
 
-def load_mapping(path_prefix):
-    mapping_path = os.path.join(path_prefix, "urls_to_downloaded_filesnames.json")
+def load_mapping(path_prefix, use_firecrawl):
+    file_name = (
+        "urls_to_downloaded_filesnames.json"
+        if not use_firecrawl
+        else "firecrawl_urls_to_downloaded_filesnames.json"
+    )
+    mapping_path = os.path.join(path_prefix, file_name)
     if os.path.exists(mapping_path):
-        with open(mapping_path, "r") as f:
+        with open(mapping_path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
 
-def save_mapping(mapping, path_prefix):
-    mapping_path = os.path.join(path_prefix, "urls_to_downloaded_filesnames.json")
+def save_mapping(mapping, path_prefix, use_firecrawl):
+    file_name = (
+        "urls_to_downloaded_filesnames.json"
+        if not use_firecrawl
+        else "firecrawl_urls_to_downloaded_filesnames.json"
+    )
+    mapping_path = os.path.join(path_prefix, file_name)
     os.makedirs(os.path.dirname(mapping_path), exist_ok=True)
-    with open(mapping_path, "w") as f:
-        json.dump(mapping, f, indent=2)
+    with open(mapping_path, "w", encoding="utf-8") as f:
+        output_str = json.dumps(mapping, indent=2, ensure_ascii=False)
+        f.write(output_str)
+        f.write("\n")
 
 
 def get_session():
@@ -102,6 +126,29 @@ def find_unique_name(base_name, ext, save_dir):
         path = Path(save_dir) / filename
         i += 1
     return path, filename
+
+
+def download_and_store_with_firecrawl(url, path_prefix):
+    save_dir = os.path.join(path_prefix, "firecrawl_downloaded_files")
+    os.makedirs(save_dir, exist_ok=True)
+    try:
+        parsed_url = urlparse(url)
+        ftp_path = parsed_url.path
+        base_name = Path(ftp_path).name or "file"
+        ext = ".json"
+        path, filename = find_unique_name(base_name, ext, save_dir)
+        app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
+        content = app.scrape_url(url, formats=["markdown", "html"])
+        with open(path, "w", encoding="utf-8") as f:
+            output_str = json.dumps(content, ensure_ascii=False)
+            f.write(output_str)
+            f.write("\n")
+
+        return (url, filename)
+
+    except Exception as e:
+        print(f"[FireCrawl Error] Failed to download {url}: {e}")
+        return (url, None)
 
 
 def download_and_store(url, path_prefix):
@@ -162,27 +209,48 @@ def main():
     parser.add_argument(
         "--workers", type=int, default=8, help="Number of worker processes to use"
     )
+    parser.add_argument(
+        "--dataset", type=str, required=True, help="The search arena dataset name"
+    )
+    parser.add_argument(
+        "--skip_multi_turn", action="store_true", help="skips multi-turn queries"
+    )
+    parser.add_argument(
+        "--skip_no_vote", action="store_true", help="skips queries with no human vote"
+    )
+    parser.add_argument(
+        "--use_firecrawl",
+        action="store_true",
+        help="Uses Firecrawl.dev for downloading urls",
+    )
     args = parser.parse_args()
 
     urls_file = os.path.join(args.path_prefix, "urls.txt")
     print("Aggregating URLs...")
-    aggregate_urls(urls_file)
-    with open(urls_file, "r") as f:
+    aggregate_urls(args.dataset, args.skip_multi_turn, args.skip_no_vote, urls_file)
+    with open(urls_file, "r", encoding="utf-8") as f:
         urls = [line.strip() for line in f if line.strip()]
     urls = sorted(urls)
 
-    existing_mapping = load_mapping(args.path_prefix)
-    urls_to_download = [url for url in urls if url not in existing_mapping]
+    existing_mapping = load_mapping(args.path_prefix, args.use_firecrawl)
+    urls_to_download = [url for url in urls if url not in existing_mapping][:10]
     print(f"Found {len(urls_to_download)} new URLs to download...")
 
     with multiprocessing.Pool(args.workers) as pool:
-        results = pool.starmap(
-            download_and_store, [(url, args.path_prefix) for url in urls_to_download]
-        )
+        if args.use_firecrawl:
+            results = pool.starmap(
+                download_and_store_with_firecrawl,
+                [(url, args.path_prefix) for url in urls_to_download],
+            )
+        else:
+            results = pool.starmap(
+                download_and_store,
+                [(url, args.path_prefix) for url in urls_to_download],
+            )
 
     new_mapping = {url: filename for url, filename in results if url and filename}
     merged_mapping = {**existing_mapping, **new_mapping}
-    save_mapping(merged_mapping, args.path_prefix)
+    save_mapping(merged_mapping, args.path_prefix, args.use_firecrawl)
 
     for url, filename in new_mapping.items():
         print(f"[Downloaded] {url} -> {filename}")

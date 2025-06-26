@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import ast
 
 import pandas as pd
 from datasets import load_dataset
@@ -15,8 +16,12 @@ def compute_language_percentages(inversion_by_lang, dataset_df, jsonl_df):
     remaining_count = total_rows
 
     percentage = {}
+    lang_key = (
+        "language" if "language" in merged_df else "languages"
+    )  # 24k uses languages, v1-7k uses language
     for lang, qids in inversion_by_lang.items():
-        lang_df = merged_df[merged_df["language"] == lang]
+        mask = merged_df[lang_key].astype(str) == lang
+        lang_df = merged_df[mask]
         lang_count = lang_df.shape[0]
         if lang_count / total_rows < 0.029:  # Filter out low-frequency languages
             continue
@@ -37,10 +42,13 @@ def main():
     parser.add_argument(
         "--path_prefix", type=str, required=True, help="Input and Output path prefix"
     )
+    parser.add_argument("--dataset", type=str, required=True, help="dataset name")
     args = parser.parse_args()
 
     inversion_by_lang, metadata = load_inversion_ids(args.path_prefix)
-    dataset_df = load_dataset("lmarena-ai/search-arena-v1-7k", split="test").to_pandas()
+    dataset_df = load_dataset(args.dataset, split="test").to_pandas()
+    if "question_id" not in dataset_df.columns:  # 24k has removed 'question_id'
+        dataset_df["question_id"] = dataset_df.index
     jsonl_df = pd.read_json(os.path.join(args.path_prefix, "results.jsonl"), lines=True)
 
     percentage = compute_language_percentages(inversion_by_lang, dataset_df, jsonl_df)
