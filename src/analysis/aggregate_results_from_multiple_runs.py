@@ -25,6 +25,7 @@ def main(input_paths, output_path):
         "nugget_assignment": [],
         "multi_turn": [],
         "sampling": [],
+        "no_vote": [],
     }
     for input_path in input_paths:
         with open(f"{input_path}/skips.json", "r") as f:

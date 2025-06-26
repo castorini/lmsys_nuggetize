@@ -105,10 +105,18 @@ def conf_matrices_for_query_categories(
 
 
 def conf_matrices_for_languages(diff_thresh, data_df, metrics, output_dir):
-    for language, freq in data_df["language"].value_counts().items():
+    lang_key = (
+        "language" if "language" in data_df else "languages"
+    )  # 24k uses languages, v1-7k uses language
+    for language, freq in data_df[lang_key].value_counts().items():
         if freq <= 100:
             continue
-        qids = list(data_df[data_df["language"] == language]["question_id"])
+        mask = data_df[lang_key].astype(str) == str(language)
+        lang_df = data_df[mask]
+        qids = list(lang_df["question_id"])
+        if not isinstance(language, str):
+            assert len(language) == 1, "multilingual category is being skipped"
+            language = language[0]
         for metric in metrics:
             labels = prepare_labels(data_df, diff_thresh, metric, allowed_qids=qids)
             path = os.path.join(
@@ -167,11 +175,19 @@ def main():
         default=7,
         help="Threshold to classify queries into a category",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        required=True,
+        help="dataset name",
+    )
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    dataset_df = load_dataset("lmarena-ai/search-arena-v1-7k", split="test").to_pandas()
+    dataset_df = load_dataset(args.dataset, split="test").to_pandas()
+    if "question_id" not in dataset_df.columns:  # 24k has removed 'question_id'
+        dataset_df["question_id"] = dataset_df.index
     jsonl_df = pd.read_json(args.results_path, lines=True)
     merged_df = pd.merge(
         dataset_df, jsonl_df, on=["question_id", "winner"], how="inner"

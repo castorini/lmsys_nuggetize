@@ -12,15 +12,25 @@ def get_turn_label(row):
     return "4+"
 
 
-def prepare_dataset_df():
-    input_df = load_dataset("lmarena-ai/search-arena-v1-7k", split="test").to_pandas()
+def prepare_dataset_df(dataset, skip_multi_turn, skip_no_vote):
+    input_df = load_dataset(dataset, split="test").to_pandas()
     stats = []
     for _, row in input_df.iterrows():
-        if row["turn"] > 1:
+        if skip_multi_turn and row["turn"] > 1:
             continue
+        if skip_no_vote and not row["winner"]:
+            continue
+        if "languages" in input_df:  # 24k version uses languages
+            language = (
+                row["languages"][0]
+                if len(row["languages"]) == 1
+                else str(row["languages"])
+            )
+        else:
+            language = row["language"]
         stats.append(
             {
-                "language": row["language"],
+                "language": language,
                 "turns": get_turn_label(row),
                 "winner": row["winner"],
             }
@@ -95,10 +105,23 @@ def main():
         default=5,
         help="Number of top languages to include in language pie chart.",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        required=True,
+        help="Dataset name",
+    )
+    parser.add_argument(
+        "--skip_multi_turn", action="store_true", help="skips multi-turn queries"
+    )
+    parser.add_argument(
+        "--skip_no_vote", action="store_true", help="skips queries with no human vote"
+    )
+
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
-    df = prepare_dataset_df()
+    df = prepare_dataset_df(args.dataset, args.skip_multi_turn, args.skip_no_vote)
     win_pie_chart(df, args.output_dir)
     lang_pie_chart(args.top_n_languages, df, args.output_dir)
 

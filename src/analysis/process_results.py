@@ -32,6 +32,12 @@ def main():
         required=True,
         help="Language to filter for diagram candidates",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        required=True,
+        help="the search arena dataset",
+    )
     args = parser.parse_args()
 
     stats = defaultdict(int)
@@ -41,21 +47,28 @@ def main():
     data = []
     threshold = args.inversion_threshold
 
-    input_df = load_dataset("lmarena-ai/search-arena-v1-7k", split="test").to_pandas()
-
+    input_df = load_dataset(args.dataset, split="test").to_pandas()
+    if "question_id" not in input_df.columns:  # 24k has removed 'question_id'
+        input_df["question_id"] = input_df.index
     with open(os.path.join(args.path_prefix, "results.jsonl"), "r") as f:
         for l in f:
             data.append(json.loads(l))
-
+    lang_key = (
+        "language" if "language" in input_df.columns else "languages"
+    )  # 24k has languages as the column name.
     for row in data:
         id = row["question_id"]
-        lang = input_df.iloc[id]["language"]
+        lang = str(
+            input_df.iloc[id][lang_key]
+        )  # convert to str since in 24k the values are arrays which are not valid json keys.
         if lang not in per_language_stats:
             per_language_stats[lang] = defaultdict(int)
         per_language_stats[lang]["total"] += 1
         if lang not in per_language_inversions:
             per_language_inversions[lang] = {}
 
+        if not row["winner"]:
+            stats["no_vote"] += 1
         if "tie" in row["winner"]:
             stats["tie"] += 1
             continue
@@ -106,6 +119,7 @@ def main():
                 "failed_assignment": len(skip_data.get("nugget_assignment", [])),
                 "multi_turn": len(skip_data.get("multi_turn", [])),
                 "sampling": len(skip_data.get("sampling", [])),
+                "no_vote": len(skip_data.get("no_vote", [])),
             },
             out_f,
         )
@@ -143,8 +157,18 @@ def main():
         "inversion_metric": inversion_metric,
         "candidates_language": args.candidates_language,
     }
-    with open(os.path.join(args.path_prefix, f"diagram_candidates.json"), "w") as f:
-        json.dump({"data": sorted_diagrams, "metadata": metadata}, f, indent=2)
+    with open(
+        os.path.join(args.path_prefix, f"diagram_candidates.json"),
+        "w",
+        encoding="utf-8",
+    ) as f:
+        output_str = json.dumps(
+            {"data": sorted_diagrams, "metadata": metadata},
+            indent=2,
+            ensure_ascii=False,
+        )
+        f.write(output_str)
+        f.write("\n")
 
 
 if __name__ == "__main__":
