@@ -55,7 +55,7 @@ python -m src.visualization.distribution_density \
   --results_path $PATH_PREFIX/results.jsonl \
   --output_dir $VISUALIZATION_OUTPUT_DIR
 
-# Figures 4, 5, 6
+# Figures 4, 6, 7, 8, 11, 12 [Fig 5 will be from single_turn instead of single_turn_with_urls ]
 python -m src.visualization.confusion_matrix \
   --results_path $PATH_PREFIX/results.jsonl \
   --categories_path $CATEGORIES_PATH \
@@ -64,7 +64,26 @@ python -m src.visualization.confusion_matrix \
   --preference_threshold $THRESHOLD \
   --class_threshold $CLASS_THRESHOLD
 
-# Figure 8: LLM-as-a-judge
+# # Sweep values for the *diff/preference* threshold (edit as needed)
+# START=0.05
+# END=0.15
+# STEP=0.01
+
+# for t in $(seq -f "%.2f" "$START" "$STEP" "$END"); do
+#   outdir="${VISUALIZATION_OUTPUT_DIR}/pref_thresh_${t}"
+#   mkdir -p "$outdir"
+
+#   python -m src.visualization.confusion_matrix \
+#     --results_path "${PATH_PREFIX}/results.jsonl" \
+#     --categories_path "${CATEGORIES_PATH}" \
+#     --output_dir "$outdir" \
+#     --metrics "${METRICS}" \
+#     --preference_threshold "$t" \
+#     --class_threshold "${CLASS_THRESHOLD}" \
+#     --dataset "${DATASET}"
+# done
+
+# LLM-as-a-judge run
 # TODO(Nandan)
 
 # Figure 9
@@ -79,7 +98,7 @@ python -m src.visualization.category_histogram \
     --hf_dataset lmarena-ai/search-arena-v1-7k \
     --filter_single_turn
 
-# Table 2
+# Table 4
 python -m src.analysis.sample_queries_per_category \
   --path_prefix $PATH_PREFIX \
   --categories_path $CATEGORIES_PATH \

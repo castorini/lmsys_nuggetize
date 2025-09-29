@@ -40,7 +40,7 @@ def probability_distribution(df, metric, output_dir):
     sns.set(style="whitegrid")
 
     # Create subplots
-    fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True, sharey=True)
+    fig, axes = plt.subplots(3, 1, figsize=(8, 6), sharex=True, sharey=True)
 
     # Define categories, titles, and colors
     categories = ["model_a", "tie", "model_b"]
@@ -74,6 +74,7 @@ def probability_distribution(df, metric, output_dir):
         ax.set_ylabel(r"Density", fontsize=16)
         ax.tick_params(axis="both", labelsize=14)
         ax.grid(True)
+        ax.set_yticks([0, 1, 2, 3, 4])
 
     # Shared x label
     axes[-1].set_xlabel(

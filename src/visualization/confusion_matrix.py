@@ -12,7 +12,7 @@ from datasets import load_dataset
 from src.utils import Metric
 
 
-def draw_non_sq_confusion_matrix(gts, preds, name):
+def generate_cm(gts, preds):
     true_labels = sorted(set(gts))
     pred_labels = sorted(set(preds))
 
@@ -23,14 +23,74 @@ def draw_non_sq_confusion_matrix(gts, preds, name):
     for t, p in zip(gts, preds):
         if t in label_to_row and p in label_to_col:
             cm[label_to_row[t], label_to_col[p]] += 1
+    return cm
 
-    plt.rcParams.update({"font.size": 16})
-    _, ax = plt.subplots(figsize=(8, 6))
+
+def draw_2x2_confusion_matrix(cm, name):
+    plt.rcParams.update({"font.size": 13})
+    _, ax = plt.subplots(figsize=(4, 3))
     sns.heatmap(
         cm,
         annot=True,
         fmt="d",
         cmap="Blues",
+        annot_kws={"size": 15},
+        xticklabels=[r"Model$_{A}$", r"Model$_{B}$"],
+        yticklabels=[r"Model$_{A}$", r"Model$_{B}$"],
+    )
+    for label in ax.get_yticklabels():
+        label.set_rotation(90)
+        label.set_verticalalignment("center")
+        label.set_horizontalalignment("center")
+        label.set_multialignment("center")
+        label.set_x(label.get_position()[0] - 0.05)
+    plt.xlabel("Argmax ROUGE-L F1", fontsize=16, fontweight="bold")
+    plt.ylabel("Human Preference", fontsize=16, fontweight="bold")
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(name), exist_ok=True)
+    plt.savefig(name, bbox_inches="tight")
+    plt.close()
+
+
+def draw_sq_confusion_matrix(cm, name):
+    plt.rcParams.update({"font.size": 13})
+    _, ax = plt.subplots(figsize=(6, 3.5))
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        annot_kws={"size": 15},
+        xticklabels=[r"Model$_{A}$", "Tie", r"Model$_{B}$"],
+        yticklabels=[r"Model$_{A}$", "Tie", r"Model$_{B}$"],
+    )
+    for label in ax.get_yticklabels():
+        label.set_rotation(90)
+        label.set_verticalalignment("center")
+        label.set_horizontalalignment("center")
+        label.set_multialignment("center")
+        label.set_x(label.get_position()[0] - 0.05)
+    plt.ylabel("GPT-4.1", fontsize=16, fontweight="bold")
+    plt.xlabel("Qwen3-8B", fontsize=16, fontweight="bold")
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(name), exist_ok=True)
+    plt.savefig(name, bbox_inches="tight")
+    plt.close()
+
+
+def draw_non_sq_confusion_matrix(
+    cm,
+    name,
+    x_label="Nugget ($\\mathbf{score}_{\\mathbf{B}}$ $-$ $\\mathbf{score}_{\\mathbf{A}}$)",
+):
+    plt.rcParams.update({"font.size": 13})
+    _, ax = plt.subplots(figsize=(6, 4.5))
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        annot_kws={"size": 15},
         xticklabels=[r"Model$_{A}$", "Tie", r"Model$_{B}$"],
         yticklabels=[r"Model$_{A}$", "Tie", r"Model$_{B}$", "Tie\n(both bad)"],
     )
@@ -40,17 +100,42 @@ def draw_non_sq_confusion_matrix(gts, preds, name):
         label.set_horizontalalignment("center")
         label.set_multialignment("center")
         label.set_x(label.get_position()[0] - 0.05)
-
     plt.ylabel("Human Preference", fontsize=16, fontweight="bold")
-    plt.xlabel(
-        "Nugget ($\\mathbf{score}_{\\mathbf{B}}$ $-$ $\\mathbf{score}_{\\mathbf{A}}$)",
-        fontsize=16,
-        fontweight="bold",
-    )
+    plt.xlabel(x_label, fontsize=16, fontweight="bold")
     plt.tight_layout()
     os.makedirs(os.path.dirname(name), exist_ok=True)
-    plt.savefig(name)
+    plt.savefig(name, bbox_inches="tight")
     plt.close()
+
+
+def prepare_qwen_vs_gpt_labels(data_df, diff_thresh, metric, allowed_qids=None):
+    qwen_labels, gpt_labels = [], []
+
+    for _, val in data_df.iterrows():
+        if allowed_qids and val["question_id"] not in allowed_qids:
+            continue
+        score_a = val["nugget_metrics_a"][metric]
+        score_b = val["nugget_metrics_b"][metric]
+        diff = score_b - score_a
+
+        if abs(diff) > diff_thresh:
+            gpt = 2 if diff > 0 else 0
+        else:
+            gpt = 1
+        gpt_labels.append(gpt)
+
+        score_a = val["qwen3_8b_nugget_metrics_a"][metric]
+        score_b = val["qwen3_8b_nugget_metrics_b"][metric]
+        diff = score_b - score_a
+
+        if abs(diff) > diff_thresh:
+            qwen = 2 if diff > 0 else 0
+        else:
+            qwen = 1
+        qwen_labels.append(qwen)
+
+    assert len(qwen_labels) == len(gpt_labels), "Length mismatch between labels"
+    return gpt_labels, qwen_labels
 
 
 def prepare_labels(data_df, diff_thresh, metric, allowed_qids=None):
@@ -101,7 +186,8 @@ def conf_matrices_for_query_categories(
                 "per_query_category_conf_matrix",
                 f"{diff_thresh}_conf_mat_{cat}_{metric}.pdf",
             )
-            draw_non_sq_confusion_matrix(*labels, path)
+            cm = generate_cm(*labels)
+            draw_non_sq_confusion_matrix(cm, path)
 
 
 def conf_matrices_for_languages(diff_thresh, data_df, metrics, output_dir):
@@ -116,7 +202,8 @@ def conf_matrices_for_languages(diff_thresh, data_df, metrics, output_dir):
                 "per_lang_conf_matrix",
                 f"{diff_thresh}_conf_mat_{language}_{metric}.pdf",
             )
-            draw_non_sq_confusion_matrix(*labels, path)
+            cm = generate_cm(*labels)
+            draw_non_sq_confusion_matrix(cm, path)
 
 
 def overall_conf_matrix(diff_thresh, data_df, metrics, output_dir):
@@ -125,7 +212,54 @@ def overall_conf_matrix(diff_thresh, data_df, metrics, output_dir):
         path = os.path.join(
             output_dir, "overall_conf_matrix", f"{diff_thresh}_conf_mat_{metric}.pdf"
         )
-        draw_non_sq_confusion_matrix(*labels, path)
+        cm = generate_cm(*labels)
+        draw_non_sq_confusion_matrix(cm, path)
+
+
+def print_conf_matrix(diff_thresh, data_df, metrics):
+    for metric in metrics:
+        labels = prepare_labels(data_df, diff_thresh, metric)
+        gts, preds = labels
+        true_labels = sorted(set(gts))
+        pred_labels = sorted(set(preds))
+
+        label_to_row = {label: i for i, label in enumerate(true_labels)}
+        label_to_col = {label: i for i, label in enumerate(pred_labels)}
+
+        cm = np.zeros((len(true_labels), len(pred_labels)), dtype=int)
+        for t, p in zip(gts, preds):
+            if t in label_to_row and p in label_to_col:
+                cm[label_to_row[t], label_to_col[p]] += 1
+        print({"cm": cm, "threshold": diff_thresh, "metric": metric})
+
+
+def draw_other_matrices(output_dir):
+    # LLM-as-a-Judge
+    cm = [
+        [1137, 36, 544],
+        [466, 95, 484],
+        [558, 42, 1161],
+        [265, 40, 274],
+    ]
+    path = os.path.join(output_dir, "llm-as-a-judge.pdf")
+    draw_non_sq_confusion_matrix(cm, path, x_label="GPT-4.1 Preference")
+
+    # qwen vs gpt for nugget assignment
+    cm = [
+        [1407, 440, 125],
+        [290, 710, 249],
+        [118, 393, 1364],
+    ]
+    path = os.path.join(output_dir, "qwen_vs_gpt.pdf")
+    draw_sq_confusion_matrix(cm, path)
+
+    # Rouge-L F1
+    cm = [
+        [841, 871],
+        [958, 796],
+    ]
+    path = os.path.join(output_dir, "rouge-l-f1.pdf")
+    draw_2x2_confusion_matrix(cm, path)
 
 
 def main():
@@ -187,6 +321,7 @@ def main():
         args.preference_threshold, merged_df, metrics, args.output_dir
     )
     overall_conf_matrix(args.preference_threshold, merged_df, metrics, args.output_dir)
+    draw_other_matrices(args.output_dir)
 
 
 if __name__ == "__main__":
