@@ -99,7 +99,9 @@ def extract_all_texts(path_prefix, workers=8):
     text_mapping = {url: txt_file for url, txt_file in results if txt_file}
     mapping_output_path = Path(path_prefix) / "urls_to_text_files.json"
     with open(mapping_output_path, "w", encoding="utf-8") as f:
-        json.dump(text_mapping, f, indent=2)
+        output_str = json.dumps(text_mapping, indent=2, ensure_ascii=False)
+        f.write(output_str)
+        f.write("\n")
 
     print(f"\n✅ Saved mapping: {mapping_output_path}")
 

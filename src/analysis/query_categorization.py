@@ -54,13 +54,21 @@ def main():
     parser.add_argument("--output_file_save", type=str, required=False, default=None)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--max_completion_tokens", type=int, default=512)
+    parser.add_argument(
+        "--skip_multi_turn", action="store_true", help="skips multi-turn queries"
+    )
+    parser.add_argument(
+        "--skip_no_vote", action="store_true", help="skips queries with no human vote"
+    )
     args = parser.parse_args()
 
     ### Download scifact.zip dataset and unzip the dataset
-    hf_dataset = load_dataset(args.train_dataset, split="test")
+    dataset_df = load_dataset(args.train_dataset, split="test").to_pandas()
+    if "question_id" not in dataset_df:  # 24k has removed question_id
+        dataset_df["question_id"] = dataset_df.index
 
     ### Load the filtered dataset query and positive passages as corpus
-    print(f"Loading the test dataset ({args.train_dataset})): {len(hf_dataset)}")
+    print(f"Loading the test dataset ({args.train_dataset})): {len(dataset_df)}")
 
     ### load the OpenAI client
     client = OpenAIClient(model_name_or_path=args.model_name_or_path)
@@ -82,7 +90,13 @@ def main():
     print(f"Loaded {len(finished_queries)} queries from the existing results file....")
 
     queries_to_dict = {}
-    for row in tqdm(hf_dataset, total=len(hf_dataset), desc="Loading Dataset"):
+    for _, row in tqdm(
+        dataset_df.iterrows(), total=len(dataset_df), desc="Loading Dataset"
+    ):
+        if args.skip_multi_turn and row["turn"] != 1:
+            continue
+        if args.skip_no_vote and not row["winner"]:
+            continue
         query = row["messages_a"][0]["content"].strip()
         query_b = row["messages_b"][0]["content"].strip()
         assert query == query_b

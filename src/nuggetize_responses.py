@@ -58,6 +58,18 @@ parser.add_argument(
     default=50,
     help="the maximum number or retrieved chunks used for nugget creation",
 )
+parser.add_argument(
+    "--dataset",
+    type=str,
+    required=True,
+    help="the search arena dataset",
+)
+parser.add_argument(
+    "--skip_multi_turn", action="store_true", help="skips multi-turn queries"
+)
+parser.add_argument(
+    "--skip_no_vote", action="store_true", help="skips queries with no human vote"
+)
 args = parser.parse_args()
 
 # Unpack args
@@ -67,6 +79,9 @@ MODEL_NAME = args.model_name
 RETRIEVED_RUNFILE = args.retrieved_runfile
 CHUNKS_FILE = args.chunks_file
 MAX_CHUNKS = args.max_chunks
+DATASET = args.dataset
+SKIP_MULTI_TURN = args.skip_multi_turn
+SKIP_NO_VOTE = args.skip_no_vote
 
 
 def get_completion(row, key):
@@ -77,7 +92,7 @@ def get_completion(row, key):
 
 def parse_rank_file(retrieved_runfile):
     qid_to_doc_ids = defaultdict(list)
-    with open(retrieved_runfile, "r") as f:
+    with open(retrieved_runfile, "r", encoding="utf-8") as f:
         for line in f:
             parts = line.strip().split()
             if len(parts) < 6:
@@ -89,7 +104,7 @@ def parse_rank_file(retrieved_runfile):
 
 def load_retrieved_chunks(chunks_file):
     doc_id_to_chunk = {}
-    with open(chunks_file, "r") as f:
+    with open(chunks_file, "r", encoding="utf-8") as f:
         for line in f:
             data = json.loads(line.strip())
             doc_id_to_chunk[data["_id"]] = data["text"]
@@ -98,8 +113,10 @@ def load_retrieved_chunks(chunks_file):
 
 def process_row(index_row_tuple):
     index, row, retrieved_chunks = index_row_tuple
-    if row["turn"] != 1:
+    if SKIP_MULTI_TURN and row["turn"] != 1:
         return {"skipped_reason": "multi_turn", "question_id": index}
+    if SKIP_NO_VOTE and not row["winner"]:
+        return {"skipped_reason": "no_vote", "question_id": index}
     if random.random() > SAMPLING_RATE:
         return {"skipped_reason": "sampling", "question_id": index}
 
@@ -121,7 +138,9 @@ def process_row(index_row_tuple):
             raise ValueError("No nuggets were created.")
 
         with open(
-            f"{PATH_PREFIX}/nuggets/requests_with_nuggets_{index}.json", "w"
+            f"{PATH_PREFIX}/nuggets/requests_with_nuggets_{index}.json",
+            "w",
+            encoding="utf-8",
         ) as f:
             result_str = json.dumps(
                 {
@@ -154,7 +173,9 @@ def process_row(index_row_tuple):
             metrics[key] = calculate_nugget_scores(request.query.qid, nugget_list)
 
         with open(
-            f"{PATH_PREFIX}/assignments/assigned_nuggets_{index}.json", "w"
+            f"{PATH_PREFIX}/assignments/assigned_nuggets_{index}.json",
+            "w",
+            encoding="utf-8",
         ) as f2:
             result = {"question_id": index, "winner": row["winner"]}
             for key in ["a", "b"]:
@@ -172,7 +193,6 @@ def process_row(index_row_tuple):
             "winner": row["winner"],
             "metrics_a": metrics["a"].__dict__,
             "metrics_b": metrics["b"].__dict__,
-            "skipped_reason": None,
         }
 
     except Exception as e:
@@ -183,7 +203,7 @@ def process_row(index_row_tuple):
 def create_and_assign_nuggets_parallel(max_workers):
     os.makedirs(f"{PATH_PREFIX}/nuggets", exist_ok=True)
     os.makedirs(f"{PATH_PREFIX}/assignments", exist_ok=True)
-    data = load_dataset("lmarena-ai/search-arena-v1-7k", split="test")
+    data = load_dataset(DATASET, split="test")
     data_df = data.to_pandas()
 
     results = []
@@ -191,6 +211,8 @@ def create_and_assign_nuggets_parallel(max_workers):
         "nugget_creation": [],
         "nugget_assignment": [],
         "multi_turn": [],
+        "no_vote": [],
+        "sampling": [],
     }
     qids_to_docids = parse_rank_file(RETRIEVED_RUNFILE) if RETRIEVED_RUNFILE else {}
     docid_to_chunk = load_retrieved_chunks(CHUNKS_FILE) if CHUNKS_FILE else {}
@@ -201,18 +223,15 @@ def create_and_assign_nuggets_parallel(max_workers):
         ]
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(
-                process_row, (index, row, qid_to_chunks[row["question_id"]])
-            ): index
+            executor.submit(process_row, (index, row, qid_to_chunks[index])): index
             for index, row in data_df.iterrows()
         }
         for future in tqdm(as_completed(futures), total=data_df.shape[0]):
             result = future.result()
-            if result.get("skipped_reason"):
-                reason = result["skipped_reason"]
-                skip_logs.setdefault(reason, []).append(result["question_id"])
+            skipped_reason = result.get("skipped_reason")
+            if skipped_reason:
+                skip_logs[skipped_reason].append(result["question_id"])
             else:
-                del result["skipped_reason"]
                 results.append(result)
 
     print("done with all runs, saving aggregated results.")

@@ -20,23 +20,33 @@ def main():
         description="Export prompts from Search-Arena dataset."
     )
     parser.add_argument(
-        "--path_prefix", required=True, help="Path prefix for output file."
+        "--path_prefix", type=str, required=True, help="Path prefix for output file."
+    )
+    parser.add_argument(
+        "--dataset", type=str, required=True, help="The search arena dataset name"
+    )
+    parser.add_argument(
+        "--skip_multi_turn", action="store_true", help="skips multi-turn queries"
+    )
+    parser.add_argument(
+        "--skip_no_vote", action="store_true", help="skips queries with no human vote"
     )
     args = parser.parse_args()
 
     os.makedirs(os.path.join(args.path_prefix, "collections/url_corpus"), exist_ok=True)
     output_path = os.path.join(args.path_prefix, "collections/url_corpus/queries.tsv")
 
-    data = load_dataset("lmarena-ai/search-arena-v1-7k", split="test")
+    data = load_dataset(args.dataset, split="test")
     data_df = data.to_pandas()
 
     with open(output_path, "w", encoding="utf-8") as out:
         for index, row in tqdm(data_df.iterrows(), total=data_df.shape[0]):
-            assert index == row["question_id"]
-            if row["turn"] != 1:
+            if args.skip_multi_turn and row["turn"] != 1:
+                continue
+            if args.skip_no_vote and not row["winner"]:
                 continue
             prompt = get_prompt(row).replace("\n", " ").replace("\t", "    ").strip()
-            out.write(f"{row['question_id']}\t{prompt}\n")
+            out.write(f"{index}\t{prompt}\n")
 
 
 if __name__ == "__main__":
