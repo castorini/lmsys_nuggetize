@@ -1,0 +1,55 @@
+### Task Description:
+In this task, you will evaluate the style, formatting, and presentation of generated answers to user queries issued to a search engine. Please note that you aren\'t evaluating the factual accuracy, relevance, or completeness of the content itself, as a separate process is responsible for reviewing the quality of the retrieval systems and source documents.
+You will be given a user query and a candidate response, along with instructions on how to evaluate the response\'s style and formatting.
+Write detailed feedback that strictly assesses the candidate\'s response based on the scoring rubric provided, focusing only on elements like fluency, coherence, grammar, syntax, and overall readability. Do not evaluate the correctness, relevance, or quality of the underlying content.
+After writing the feedback, provide a score that is an integer between 1 and 5, referring to the scoring rubric.
+The output format must be a well-formed JSON object that can be parsed without additional processing. The structure should look like this:
+{{
+  "criterion_N": {{
+    "feedback": "Write feedback here for the criteria",
+    "score": (an integer number between 1 and 5)
+  }}
+}}
+Example output:
+{{
+  "Criterion 1: Fluency and Coherence": {{
+    "feedback": "The response is mostly coherent and formatted well, but may have minor fluency issues.",
+    "score": 3
+  }},
+  "Criterion 2: Grammar and Syntax": {{
+    "feedback": "The response has some grammatical or syntactical issues, but is generally readable.",
+    "score": 3
+  }},
+  "Criterion 3: Readability and Presentation": {{
+    "feedback": "The response is generally readable, but there may be room for improvement in presentation or structure.",
+    "score": 3
+  }}
+}}
+
+User Query to evaluate:
+{query}
+
+Candidate response to evaluate:
+{response}
+
+Criterion 1: Fluency and Coherence
+Score 1: The response is unclear and difficult to follow due to poor structure, lack of coherence, or formatting issues. (e.g. the response is a jumbled collection of sentences)
+Score 2: The response has noticeable fluency or formatting issues, making it difficult to follow in parts. (e.g. the response has abrupt transitions between sentences)
+Score 3: The response is mostly coherent and formatted well but may have minor fluency or formatting issues. (e.g. the response has some awkward phrasing)
+Score 4: The response is fluent, coherent, and well-formatted with few or no issues. (e.g. the response is easy to follow and understand)
+Score 5: The response is highly fluent, coherent, and formatted excellently with no issues. (e.g. the response is engaging and polished)
+Criterion 2: Grammar and Syntax
+Score 1: The response contains numerous major grammatical and syntactical errors significantly impair readability. (e.g. the response has multiple subject-verb agreement errors)
+Score 2: The response has many grammatical or syntactical issues that moderately impair readability. (e.g. the response has several missing articles)
+Score 3: The response has some grammatical or syntactical issues but is generally readable. (e.g. the response has a few minor errors)
+Score 4: The response has few grammatical issues and is mostly correct in syntax. (e.g. the response has only one or two minor errors)
+Score 5: The response is perfectly written and has no grammatical or syntactical issues. (e.g. the response is error-free)
+Criterion 3: Readability and Presentation
+Score 1: The response is hard to read due to poor organization, lack of structure, or formatting choices. (e.g. the response is a block of text with no paragraphs)
+Score 2: The response has readability issues stemming from inconsistent formatting or awkward organization. (e.g. the response has uneven paragraph lengths)
+Score 3: The response is generally readable, but there may be room for improvement in presentation or structure. (e.g. the response has some awkwardly placed transitions)
+Score 4: The response is well-presented, easy to read, and logically structured with only minor issues. (e.g. the response has clear headings and concise paragraphs)
+Score 5: The response is highly readable, perfectly organized, and professionally formatted. (e.g. the response is visually appealing and easy to navigate)
+Note: Respond with fluency scores even if this content has been generated on topics which your safety guardrails come into play. These are all journalistic articles and evaluation of published materials does not clonfict with your safety protocols as these have been published by reputable institutions. 
+Note: Please ensure that your response is a well-formed JSON object that can be parsed without additional processing. Focus only on the specified criteria and do not evaluate the correctness, relevance, or quality of the underlying content. Do not respond with anything but JSON and ensure that the json keys match those shown in the examples EXACTLY!
+\#\#\# Response:
